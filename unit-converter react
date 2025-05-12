@@ -1,0 +1,345 @@
+import { useState, useEffect } from 'react'
+import { Button } from "/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "/components/ui/card"
+import { ArrowRightLeft, RefreshCw, Copy, Moon, Sun } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "/components/ui/select"
+import { Input } from "/components/ui/input"
+
+// Define unit types and conversion functions
+type UnitCategory = {
+  name: string
+  units: {
+    name: string
+    toBase: (value: number) => number
+    fromBase: (value: number) => number
+  }[]
+}
+
+const unitCategories: Record<string, UnitCategory> = {
+  length: {
+    name: "Length",
+    units: [
+      { name: "Millimeter", toBase: (v) => v / 1000, fromBase: (v) => v * 1000 },
+      { name: "Centimeter", toBase: (v) => v / 100, fromBase: (v) => v * 100 },
+      { name: "Meter", toBase: (v) => v, fromBase: (v) => v },
+      { name: "Kilometer", toBase: (v) => v * 1000, fromBase: (v) => v / 1000 },
+      { name: "Inch", toBase: (v) => v * 0.0254, fromBase: (v) => v / 0.0254 },
+      { name: "Foot", toBase: (v) => v * 0.3048, fromBase: (v) => v / 0.3048 },
+      { name: "Yard", toBase: (v) => v * 0.9144, fromBase: (v) => v / 0.9144 },
+      { name: "Mile", toBase: (v) => v * 1609.34, fromBase: (v) => v / 1609.34 },
+    ]
+  },
+  weight: {
+    name: "Weight",
+    units: [
+      { name: "Milligram", toBase: (v) => v / 1000000, fromBase: (v) => v * 1000000 },
+      { name: "Gram", toBase: (v) => v / 1000, fromBase: (v) => v * 1000 },
+      { name: "Kilogram", toBase: (v) => v, fromBase: (v) => v },
+      { name: "Tonne", toBase: (v) => v * 1000, fromBase: (v) => v / 1000 },
+      { name: "Ounce", toBase: (v) => v * 0.0283495, fromBase: (v) => v / 0.0283495 },
+      { name: "Pound", toBase: (v) => v * 0.453592, fromBase: (v) => v / 0.453592 },
+    ]
+  },
+  temperature: {
+    name: "Temperature",
+    units: [
+      { name: "Celsius", toBase: (v) => v, fromBase: (v) => v },
+      { name: "Fahrenheit", toBase: (v) => (v - 32) * 5/9, fromBase: (v) => v * 9/5 + 32 },
+      { name: "Kelvin", toBase: (v) => v - 273.15, fromBase: (v) => v + 273.15 },
+    ]
+  },
+  volume: {
+    name: "Volume",
+    units: [
+      { name: "Milliliter", toBase: (v) => v / 1000, fromBase: (v) => v * 1000 },
+      { name: "Liter", toBase: (v) => v, fromBase: (v) => v },
+      { name: "Cubic Meter", toBase: (v) => v * 1000, fromBase: (v) => v / 1000 },
+      { name: "Teaspoon", toBase: (v) => v * 0.00492892, fromBase: (v) => v / 0.00492892 },
+      { name: "Tablespoon", toBase: (v) => v * 0.0147868, fromBase: (v) => v / 0.0147868 },
+      { name: "Cup", toBase: (v) => v * 0.236588, fromBase: (v) => v / 0.236588 },
+      { name: "Pint", toBase: (v) => v * 0.473176, fromBase: (v) => v / 0.473176 },
+      { name: "Quart", toBase: (v) => v * 0.946353, fromBase: (v) => v / 0.946353 },
+      { name: "Gallon", toBase: (v) => v * 3.78541, fromBase: (v) => v / 3.78541 },
+    ]
+  },
+  time: {
+    name: "Time",
+    units: [
+      { name: "Second", toBase: (v) => v, fromBase: (v) => v },
+      { name: "Minute", toBase: (v) => v * 60, fromBase: (v) => v / 60 },
+      { name: "Hour", toBase: (v) => v * 3600, fromBase: (v) => v / 3600 },
+      { name: "Day", toBase: (v) => v * 86400, fromBase: (v) => v / 86400 },
+      { name: "Week", toBase: (v) => v * 604800, fromBase: (v) => v / 604800 },
+      { name: "Month", toBase: (v) => v * 2629746, fromBase: (v) => v / 2629746 },
+      { name: "Year", toBase: (v) => v * 31556952, fromBase: (v) => v / 31556952 },
+    ]
+  },
+  digital: {
+    name: "Digital Storage",
+    units: [
+      { name: "Bit", toBase: (v) => v / 8, fromBase: (v) => v * 8 },
+      { name: "Byte", toBase: (v) => v, fromBase: (v) => v },
+      { name: "Kilobyte", toBase: (v) => v * 1024, fromBase: (v) => v / 1024 },
+      { name: "Megabyte", toBase: (v) => v * 1048576, fromBase: (v) => v / 1048576 },
+      { name: "Gigabyte", toBase: (v) => v * 1073741824, fromBase: (v) => v / 1073741824 },
+      { name: "Terabyte", toBase: (v) => v * 1099511627776, fromBase: (v) => v / 1099511627776 },
+    ]
+  }
+}
+
+export default function UnitConverter() {
+  const [category, setCategory] = useState<string>("length")
+  const [fromUnit, setFromUnit] = useState<string>("Meter")
+  const [toUnit, setToUnit] = useState<string>("Kilometer")
+  const [inputValue, setInputValue] = useState<string>("1")
+  const [result, setResult] = useState<string>("1")
+  const [history, setHistory] = useState<Array<{from: string, to: string, value: string, result: string}>>([])
+  const [darkMode, setDarkMode] = useState<boolean>(false)
+  const [copied, setCopied] = useState<boolean>(false)
+
+  // Load saved preferences from localStorage
+  useEffect(() => {
+    const savedDarkMode = localStorage.getItem('unitConverterDarkMode')
+    if (savedDarkMode) setDarkMode(savedDarkMode === 'true')
+    
+    const savedHistory = localStorage.getItem('unitConverterHistory')
+    if (savedHistory) setHistory(JSON.parse(savedHistory))
+  }, [])
+
+  // Save preferences to localStorage
+  useEffect(() => {
+    localStorage.setItem('unitConverterDarkMode', darkMode.toString())
+    localStorage.setItem('unitConverterHistory', JSON.stringify(history))
+  }, [darkMode, history])
+
+  // Calculate conversion whenever inputs change
+  useEffect(() => {
+    if (!inputValue) {
+      setResult("")
+      return
+    }
+
+    const numValue = parseFloat(inputValue)
+    if (isNaN(numValue)) {
+      setResult("Invalid input")
+      return
+    }
+
+    const currentCategory = unitCategories[category]
+    const fromUnitObj = currentCategory.units.find(u => u.name === fromUnit)
+    const toUnitObj = currentCategory.units.find(u => u.name === toUnit)
+
+    if (!fromUnitObj || !toUnitObj) {
+      setResult("Error")
+      return
+    }
+
+    // Convert to base unit first, then to target unit
+    const baseValue = fromUnitObj.toBase(numValue)
+    const convertedValue = toUnitObj.fromBase(baseValue)
+
+    // Format the result with appropriate decimal places
+    const formattedResult = convertedValue.toFixed(6).replace(/\.?0+$/, '')
+    setResult(formattedResult)
+
+    // Add to history if not already there
+    const newConversion = {
+      from: `${inputValue} ${fromUnit}`,
+      to: `${formattedResult} ${toUnit}`,
+      value: inputValue,
+      result: formattedResult
+    }
+
+    if (history.length === 0 || 
+        history[0].from !== newConversion.from || 
+        history[0].to !== newConversion.to) {
+      setHistory([newConversion, ...history.slice(0, 9)])
+    }
+  }, [inputValue, fromUnit, toUnit, category])
+
+  const handleSwap = () => {
+    setFromUnit(toUnit)
+    setToUnit(fromUnit)
+  }
+
+  const handleReset = () => {
+    setInputValue("1")
+    setFromUnit("Meter")
+    setToUnit("Kilometer")
+    setCategory("length")
+  }
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(result)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const clearHistory = () => {
+    setHistory([])
+  }
+
+  const toggleDarkMode = () => {
+    setDarkMode(!darkMode)
+  }
+
+  return (
+    <div className={`min-h-screen ${darkMode ? 'dark bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
+      <div className="container mx-auto px-4 py-8">
+        <Card className="max-w-3xl mx-auto">
+          <CardHeader className="flex flex-row justify-between items-center">
+            <CardTitle>Unit Converter</CardTitle>
+            <Button variant="ghost" size="icon" onClick={toggleDarkMode} aria-label="Toggle dark mode">
+              {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              {/* Category Selection */}
+              <div>
+                <label htmlFor="category" className="block text-sm font-medium mb-1">
+                  Category
+                </label>
+                <Select value={category} onValueChange={(value) => {
+                  setCategory(value)
+                  const defaultUnits = unitCategories[value].units
+                  setFromUnit(defaultUnits[0].name)
+                  setToUnit(defaultUnits[1].name)
+                }}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select a category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.keys(unitCategories).map((cat) => (
+                      <SelectItem key={cat} value={cat}>
+                        {unitCategories[cat].name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Conversion Input */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                <div>
+                  <label htmlFor="fromValue" className="block text-sm font-medium mb-1">
+                    Value
+                  </label>
+                  <Input
+                    id="fromValue"
+                    type="text"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    placeholder="Enter value"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="fromUnit" className="block text-sm font-medium mb-1">
+                    From
+                  </label>
+                  <Select value={fromUnit} onValueChange={setFromUnit}>
+                    <SelectTrigger id="fromUnit" className="w-full">
+                      <SelectValue placeholder="Select unit" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {unitCategories[category].units.map((unit) => (
+                        <SelectItem key={unit.name} value={unit.name}>
+                          {unit.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex justify-center">
+                  <Button variant="outline" size="icon" onClick={handleSwap} aria-label="Swap units">
+                    <ArrowRightLeft className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                <div>
+                  <label htmlFor="toUnit" className="block text-sm font-medium mb-1">
+                    To
+                  </label>
+                  <Select value={toUnit} onValueChange={setToUnit}>
+                    <SelectTrigger id="toUnit" className="w-full">
+                      <SelectValue placeholder="Select unit" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {unitCategories[category].units.map((unit) => (
+                        <SelectItem key={unit.name} value={unit.name}>
+                          {unit.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label htmlFor="result" className="block text-sm font-medium mb-1">
+                    Result
+                  </label>
+                  <div className="flex">
+                    <Input
+                      id="result"
+                      type="text"
+                      value={result}
+                      readOnly
+                      className="flex-1"
+                    />
+                    <Button
+                      variant="outline"
+                      className="ml-2"
+                      onClick={handleCopy}
+                      aria-label="Copy result"
+                    >
+                      <Copy className="h-4 w-4 mr-1" />
+                      {copied ? "Copied!" : "Copy"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end space-x-2">
+                <Button variant="outline" onClick={handleReset}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Reset
+                </Button>
+              </div>
+
+              {/* Conversion History */}
+              {history.length > 0 && (
+                <div className="mt-8">
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="text-lg font-medium">Recent Conversions</h3>
+                    <Button variant="ghost" size="sm" onClick={clearHistory}>
+                      Clear History
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    {history.map((item, index) => (
+                      <div key={index} className="p-3 border rounded-lg">
+                        <div className="font-medium">{item.from} = {item.to}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {unitCategories[category].name}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}
